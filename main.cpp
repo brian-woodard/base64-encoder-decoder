@@ -61,12 +61,7 @@ std::string base64_encode(const std::string& Input)
       }
       else
       {
-         // TODO: Better way to set mask?
-         uint16_t mask = 0;
-         for (int j = 0; j < num_bits; j++)
-         {
-            mask |= (1 << j);
-         }
+         uint16_t mask = (1 << num_bits) - 1;
          value = (value & mask) << 8;
       }
    }
