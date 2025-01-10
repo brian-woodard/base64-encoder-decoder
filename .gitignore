@@ -1,3 +1,4 @@
 main
 main.s
+sha1
 *.o
