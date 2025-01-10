@@ -14,6 +14,7 @@
 #include <queue>
 #include <sys/stat.h>
 #include <cstdint>
+#include <cassert>
 #include "PrintData.h"
 
 enum
@@ -194,35 +195,36 @@ int SHA1Input(    SHA1Context    *context,
     if (context->Computed)
     {
         context->Corrupted = shaStateError;
-return shaStateError;
+        return shaStateError;
     }
 
     if (context->Corrupted)
     {
          return context->Corrupted;
     }
+
     while(length-- && !context->Corrupted)
     {
-    context->Message_Block[context->Message_Block_Index++] =
-                    (*message_array & 0xFF);
+       context->Message_Block[context->Message_Block_Index++] =
+                       (*message_array & 0xFF);
 
-    context->Length_Low += 8;
-    if (context->Length_Low == 0)
-    {
-        context->Length_High++;
-        if (context->Length_High == 0)
-        {
-            /* Message is too long */
-            context->Corrupted = 1;
-        }
-    }
+       context->Length_Low += 8;
+       if (context->Length_Low == 0)
+       {
+           context->Length_High++;
+           if (context->Length_High == 0)
+           {
+               /* Message is too long */
+               context->Corrupted = 1;
+           }
+       }
 
-    if (context->Message_Block_Index == 64)
-    {
-        SHA1ProcessMessageBlock(context);
-    }
+       if (context->Message_Block_Index == 64)
+       {
+           SHA1ProcessMessageBlock(context);
+       }
 
-    message_array++;
+       message_array++;
     }
 
     return shaSuccess;
@@ -405,15 +407,84 @@ void SHA1PadMessage(SHA1Context *context)
     SHA1ProcessMessageBlock(context);
 }
 
+/*
+ *  Define patterns for testing
+ */
+#define TEST1   "abc"
+#define TEST2a  "abcdbcdecdefdefgefghfghighijhi"
+#define TEST2b  "jkijkljklmklmnlmnomnopnopq"
+#define TEST2   TEST2a TEST2b
+#define TEST3   "a"
+#define TEST4a  "01234567012345670123456701234567"
+#define TEST4b  "01234567012345670123456701234567"
+    /* an exact multiple of 512 bits */
+#define TEST4   TEST4a TEST4b
+const char *testarray[4] =
+{
+    TEST1,
+    TEST2,
+    TEST3,
+    TEST4
+};
+//long int repeatcount[4] = { 1, 1, 1000000, 10 };
+
+uint8_t resultarray[4][20] =
+{
+   { 0xA9, 0x99, 0x3E, 0x36, 0x47, 0x06, 0x81, 0x6A, 0xBA, 0x3E, 0x25, 0x71, 0x78, 0x50, 0xC2, 0x6C, 0x9C, 0xD0, 0xD8, 0x9D },
+   { 0x84, 0x98, 0x3E, 0x44, 0x1C, 0x3B, 0xD2, 0x6E, 0xBA, 0xAE, 0x4A, 0xA1, 0xF9, 0x51, 0x29, 0xE5, 0xE5, 0x46, 0x70, 0xF1 },
+   { 0x34, 0xAA, 0x97, 0x3C, 0xD4, 0xC4, 0xDA, 0xA4, 0xF6, 0x1E, 0xEB, 0x2B, 0xDB, 0xAD, 0x27, 0x31, 0x65, 0x34, 0x01, 0x6F },
+   { 0xDE, 0xA3, 0x56, 0xA2, 0xCD, 0xDD, 0x90, 0xC7, 0xA7, 0xEC, 0xED, 0xC5, 0xEB, 0xB5, 0x63, 0x93, 0x4F, 0x46, 0x04, 0x52 },
+};
+
 int main()
 {
-   //SHA1Context context = {};
-   //const char* input = "test";
-   //uint8_t     output[SHA1HashSize] = {};
+   SHA1Context context = {};
+   const char* input = "";
+   uint8_t     output[SHA1HashSize] = {};
+
+   SHA1Reset(&context);
+   SHA1Input(&context, (const uint8_t*)input, 0);
+   SHA1Result(&context, output);
+
+   printf("output:\n%s\n", CPrintData::GetDataAsString((char*)output, sizeof(output)));
 
    //SHA1Reset(&context);
-   //SHA1Input(&context, (const uint8_t*)input, 4);
+   //SHA1Input(&context, (const uint8_t*)TEST1, strlen(TEST1));
    //SHA1Result(&context, output);
+   //printf("TEST1 '%s' output:\n%s\n", TEST1, CPrintData::GetDataAsString((char*)output, sizeof(output)));
+   //assert(memcmp(&output, &resultarray[0][0], sizeof(output)) == 0);
 
-   printf("output: \n");
+   SHA1Reset(&context);
+   SHA1Input(&context, (const uint8_t*)TEST2, strlen(TEST2));
+   SHA1Result(&context, output);
+   printf("TEST2 '%s' output:\n%s\n", TEST2, CPrintData::GetDataAsString((char*)output, sizeof(output)));
+   assert(memcmp(&output, &resultarray[1][0], sizeof(output)) == 0);
+
+   //SHA1Reset(&context);
+   //SHA1Input(&context, (const uint8_t*)TEST3, strlen(TEST3));
+   //SHA1Result(&context, output);
+   //printf("TEST3 '%s' output:\n%s\n", TEST3, CPrintData::GetDataAsString((char*)output, sizeof(output)));
+
+   //SHA1Reset(&context);
+   //SHA1Input(&context, (const uint8_t*)TEST4, strlen(TEST4));
+   //SHA1Result(&context, output);
+   //printf("TEST4 '%s' output:\n%s\n", TEST4, CPrintData::GetDataAsString((char*)output, sizeof(output)));
+
+   SHA1Reset(&context);
+   const char* test_str = "The quick brown fox jumps over the lazy dog";
+   SHA1Input(&context, (const uint8_t*)test_str, strlen(test_str));
+   SHA1Result(&context, output);
+   printf("output:\n%s\n", CPrintData::GetDataAsString((char*)output, sizeof(output)));
+
+   SHA1Reset(&context);
+   const char* test_str1 = "dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+   SHA1Input(&context, (const uint8_t*)test_str1, strlen(test_str1));
+   SHA1Result(&context, output);
+   printf("output:\n%s\n", CPrintData::GetDataAsString((char*)output, sizeof(output)));
+
+   SHA1Reset(&context);
+   const char* test_str2 = "dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+   SHA1Input(&context, (const uint8_t*)test_str2, strlen(test_str2));
+   SHA1Result(&context, output);
+   printf("output:\n%s\n", CPrintData::GetDataAsString((char*)output, sizeof(output)));
 }
