@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cassert>
 #include "PrintData.h"
+#include "IosDataTypes.h"
 
 // Example handshake request from client:
 // ----------------------------------------------------------
@@ -425,8 +426,38 @@ int main()
                client = -1;
             }
          }
+         else if (bytes > 0 && !handshake)
+         {
+            int fin_bit = buffer[0] & 0x80;
+            int opcode = buffer[0] & 0xf;
+            int mask_bit = buffer[1] & 0x80;
+            int length = buffer[1] & 0x7f;
+
+            printf("Received %d bytes from client\n", bytes);
+            printf("%s\n", CPrintData::GetDataAsString((char*)buffer, bytes));
+
+            // only support unfragmented binary messages, messages from client
+            // must be masked
+            assert(fin_bit != 0);
+            assert(opcode == 2);
+            assert(mask_bit != 0);
+
+            uint8_t mask[4] = { buffer[2], buffer[3], buffer[4], buffer[5] };
+
+            // unmask the payload data
+            for (int i = 0; i < length; i++)
+            {
+               buffer[i + 6] = buffer[i + 6] ^ mask[i % 4];
+            }
+
+            printf("Received %d bytes from client\n", bytes);
+            printf("%s\n", CPrintData::GetDataAsString((char*)buffer, bytes));
+            TSyncRequestMessage* sync_request = (TSyncRequestMessage*)&buffer[6];
+            printf("MsgId: %d\n", sync_request->Header.MsgId);
+            printf("Size:  %d\n", sync_request->Header.Size);
+         }
       }
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
    }
 }
