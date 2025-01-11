@@ -1,4 +1,5 @@
 main
 main.s
 sha1
+websocket_server
 *.o
