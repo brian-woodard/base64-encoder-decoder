@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <cassert>
+#include <climits>
 #include "PrintData.h"
 #include "IosDataTypes.h"
 
@@ -349,7 +350,7 @@ int main()
 
    while (1)
    {
-      printf("Client %d, handshake = %d\n", client, handshake);
+      //printf("Client %d, handshake = %d\n", client, handshake);
 
       if (client == -1)
       {
@@ -433,7 +434,15 @@ int main()
             int mask_bit = buffer[1] & 0x80;
             int length = buffer[1] & 0x7f;
 
-            printf("Received %d bytes from client\n", bytes);
+            // Length of the payload (extension data + application data) in bytes.
+            // 0–125 = This is the payload length.
+            // 126 = The following 16 bits are the payload length.
+            // 127 = The following 64 bits (MSB must be 0) are the payload length.
+            // 
+            // Endianness is big-endian. Signedness is unsigned.
+            // The minimum number of bits must be used to encode the length.
+
+            printf("\nReceived %d bytes from client\n", bytes);
             printf("%s\n", CPrintData::GetDataAsString((char*)buffer, bytes));
 
             // only support unfragmented binary messages, messages from client
@@ -450,11 +459,56 @@ int main()
                buffer[i + 6] = buffer[i + 6] ^ mask[i % 4];
             }
 
-            printf("Received %d bytes from client\n", bytes);
-            printf("%s\n", CPrintData::GetDataAsString((char*)buffer, bytes));
-            TSyncRequestMessage* sync_request = (TSyncRequestMessage*)&buffer[6];
-            printf("MsgId: %d\n", sync_request->Header.MsgId);
-            printf("Size:  %d\n", sync_request->Header.Size);
+            if (length == sizeof(TSyncRequestMessage))
+            {
+               TSyncRequestMessage* sync_request = (TSyncRequestMessage*)&buffer[6];
+               printf("MsgId: %d\n", sync_request->Header.MsgId);
+               printf("Size:  %d\n", sync_request->Header.Size);
+
+               char output_buffer[USHRT_MAX];
+               int  offset = 0;
+
+               TSyncResponseMessage msg;
+
+               msg.Header.MsgId = TMessageType::SYNC_RESPONSE;
+               msg.Header.Size = sizeof(msg);
+               msg.ServerSendPort = 35000;
+               msg.ServerReceivePort = 35000;
+
+               // Build output buffer (add on 2-byte header, no masking)
+               output_buffer[offset++] = 0x82; // set FIN and opcode to 2 (binary)
+
+               // Length of the payload (extension data + application data) in bytes.
+               // 0–125 = This is the payload length.
+               // 126 = The following 16 bits are the payload length.
+               // 127 = The following 64 bits (MSB must be 0) are the payload length.
+               //  
+               // Endianness is big-endian. Signedness is unsigned.
+               // The minimum number of bits must be used to encode the length.
+               if (msg.Header.Size <= 125)
+               {   
+                  output_buffer[offset++] = msg.Header.Size;
+               }   
+               else if (msg.Header.Size < (USHRT_MAX - 4)) 
+               {   
+                  uint16_t length = msg.Header.Size;
+
+                  output_buffer[offset++] = 126;
+
+                  memcpy(&output_buffer[offset], &length, sizeof(length));
+                  offset += sizeof(length);
+               }   
+               else
+               {   
+                  return -1; 
+               }   
+
+               memcpy(&output_buffer[offset], (const char*)&msg, sizeof(msg));
+
+               int bytes = send(client, output_buffer, sizeof(msg) + offset, 0);
+               printf("\nResponded with %d bytes\n", bytes);
+               printf("%s\n", CPrintData::GetDataAsString(output_buffer, bytes));
+            }
          }
       }
 
